@@ -11,7 +11,7 @@
     <div>
       <p class="eyebrow">PERSONAL MARKET INTELLIGENCE</p>
       <h1>ETF Radar</h1>
-      <p class="subtitle">先看上涨靠什么，再看这些条件是否仍在。</p>
+      <p class="subtitle">先看事实和证据，再由你判断上涨条件是否仍在。</p>
     </div>
     <div id="updateMeta" class="update-meta">读取数据中…</div>
   </header>
@@ -23,33 +23,38 @@
         <h2 id="etfName">—</h2>
         <p id="trackingIndex" class="muted">—</p>
       </div>
-      <div id="alertBadge" class="alert-badge">—</div>
+      <div id="alertBadge" class="alert-badge">数据状态：—</div>
     </section>
 
     <section class="grid metrics" id="metrics"></section>
 
     <section class="grid two-col">
       <article class="panel">
-        <p class="section-label">今日判断</p>
+        <p class="section-label">事实摘要，不是结论</p>
         <h3 id="actionTitle">—</h3>
         <p id="actionText" class="action-text">—</p>
-        <p class="disclaimer">状态来自规则演示数据；接入真实数据前不作为交易建议。</p>
+        <p class="disclaimer">工具展示证据、来源与缺失项；不替代你作买卖判断。</p>
       </article>
       <article class="panel">
-        <p class="section-label">为什么会影响它</p>
+        <p class="section-label">因果链：为什么要看这些</p>
         <div id="logicChain" class="logic-chain"></div>
       </article>
     </section>
 
     <section class="grid two-col">
       <article class="panel">
-        <p class="section-label bad">当前拖累</p>
+        <p class="section-label bad">当前偏弱事实</p>
         <ul id="negativeSignals" class="signal-list"></ul>
       </article>
       <article class="panel">
-        <p class="section-label good">仍在支持</p>
+        <p class="section-label good">当前偏强事实</p>
         <ul id="positiveSignals" class="signal-list"></ul>
       </article>
+    </section>
+
+    <section class="panel">
+      <p class="section-label">你的判断清单</p>
+      <ol id="decisionChecklist" class="signal-list"></ol>
     </section>
 
     <section class="panel">
