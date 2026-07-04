@@ -2,7 +2,7 @@
 
 数据源：
 - 东方财富：159822 日线
-- Yahoo Finance 图表接口：恒生科技、美元指数历史日线
+- Yahoo Finance：3033.HK 作为恒生科技ETF代理、美元指数历史日线
 - FRED：美国 10 年期国债收益率 DGS10
 
 原则：四项关键数据任一缺失，就只写“数据不完整”，不产生交易预警。
@@ -42,7 +42,10 @@ def eastmoney_etf_closes() -> list[tuple[str, float]]:
         "fields1=f1,f2,f3,f4,f5,f6&"
         "fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
     )
-    rows = get_json(url)["data"]["klines"]
+    payload = get_json(url)
+    rows = (payload.get("data") or {}).get("klines") or []
+    if not rows:
+        raise ValueError("东方财富未返回159822日线")
     return [(row.split(",")[0], float(row.split(",")[2])) for row in rows if row.split(",")[2] != "-"]
 
 
@@ -50,7 +53,13 @@ def yahoo_closes(symbol: str) -> list[tuple[str, float]]:
     now = int(time.time())
     start = now - 180 * 86400
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1={start}&period2={now}&interval=1d"
-    result = get_json(url)["chart"]["result"][0]
+    payload = get_json(url)
+    chart = payload.get("chart") or {}
+    result_list = chart.get("result") or []
+    if not result_list:
+        detail = chart.get("error") or {}
+        raise ValueError(f"Yahoo未返回{symbol}有效数据：{detail.get('description', '未知原因')}")
+    result = result_list[0]
     closes = result["indicators"]["quote"][0]["close"]
     timestamps = result["timestamp"]
     data = []
@@ -58,6 +67,8 @@ def yahoo_closes(symbol: str) -> list[tuple[str, float]]:
         if close is not None:
             day = datetime.fromtimestamp(stamp, tz=timezone.utc).date().isoformat()
             data.append((day, float(close)))
+    if not data:
+        raise ValueError(f"Yahoo返回{symbol}但无有效收盘价")
     return data
 
 
@@ -69,6 +80,8 @@ def fred_dgs10() -> list[tuple[str, float]]:
         value = row.get("DGS10", "")
         if value and value != ".":
             data.append((row["DATE"], float(value)))
+    if not data:
+        raise ValueError("FRED未返回美国10年期收益率")
     return data[-140:]
 
 
@@ -82,15 +95,15 @@ def fmt(value: float, digits: int = 3) -> str:
 
 def build_status() -> dict:
     etf = eastmoney_etf_closes()
-    hstech = yahoo_closes("%5EHSTECH")
+    hstech_proxy = yahoo_closes("3033.HK")
     dxy = yahoo_closes("DX-Y.NYB")
     dgs10 = fred_dgs10()
 
-    if min(len(etf), len(hstech), len(dxy), len(dgs10)) < 25:
-        raise ValueError("至少一项关键数据不足 25 个有效观测值")
+    if min(len(etf), len(hstech_proxy), len(dxy), len(dgs10)) < 25:
+        raise ValueError("至少一项关键数据不足25个有效观测值")
 
     etf_dates, etf_values = zip(*etf)
-    hstech_values = [x[1] for x in hstech]
+    hstech_values = [x[1] for x in hstech_proxy]
     dxy_values = [x[1] for x in dxy]
     dgs_values = [x[1] for x in dgs10]
     price = etf_values[-1]
@@ -113,10 +126,10 @@ def build_status() -> dict:
     else:
         positives.append("ETF仍在60日线上方，中期结构尚未确认走坏。")
     if hstech_5d < 0:
-        negatives.append(f"恒生科技近5日 {hstech_5d:.1f}% ，外部科技环境偏弱。")
+        negatives.append(f"恒生科技ETF代理近5日 {hstech_5d:.1f}% ，外部科技环境偏弱。")
         risk_count += 1
     else:
-        positives.append(f"恒生科技近5日 {hstech_5d:.1f}% ，外部科技环境提供支持。")
+        positives.append(f"恒生科技ETF代理近5日 {hstech_5d:.1f}% ，外部科技环境提供支持。")
     if dgs10_5d_bp > 5:
         negatives.append(f"美国10年期收益率近5日上行 {dgs10_5d_bp:.0f}bp，成长估值压力增加。")
         risk_count += 1
@@ -144,7 +157,7 @@ def build_status() -> dict:
         "price": fmt(price),
         "ma20": fmt(ma20),
         "ma60": fmt(ma60),
-        "relative_strength": f"恒科5日 {hstech_5d:+.1f}%",
+        "relative_strength": f"恒科代理5日 {hstech_5d:+.1f}%",
         "alert_level": level,
         "action_title": title,
         "action": action,
