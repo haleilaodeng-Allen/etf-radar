@@ -14,6 +14,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install data adapter
+        run: pip install --disable-pip-version-check akshare
       - name: Update market signals
         run: python scripts/update_market.py
       - name: Commit updated status when changed
