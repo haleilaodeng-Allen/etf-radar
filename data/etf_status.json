@@ -1,14 +1,14 @@
 [
   {
     "code": "159822",
-    "as_of": "ETF价格更新失败：保留上一份状态",
+    "as_of": "数据更新：场内价格 2026-07-03 · 来源：新浪历史日线",
     "price": "0.574",
     "ma20": "0.579",
     "ma60": "0.624",
     "relative_strength": "恒科代理5日 +5.2%",
-    "alert_level": "价格数据不可用",
-    "action_title": "不输出交易判断",
-    "action": "ETF日线未能更新。原因：('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+    "alert_level": "证据面板",
+    "action_title": "先看事实，再自己判断",
+    "action": "宏观数据未更新，不纳入本页事实。",
     "logic_chain": [
       "美债/美元变化",
       "成长股估值压力",
@@ -17,10 +17,11 @@
       "新经济ETF环境"
     ],
     "negative_signals": [
-      "价格数据保护触发：('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))"
+      "场内价格低于20日线。",
+      "场内价格低于60日线。"
     ],
     "positive_signals": [
-      "已有有效数据不会被空值覆盖。"
+      "恒生科技ETF代理近5日 +5.2% 。"
     ]
   }
 ]
