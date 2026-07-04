@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ETF Radar · 候选池</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">ETF CANDIDATE UNIVERSE</p>
+      <h1>候选池</h1>
+      <p class="subtitle">先筛“值得研究”，再点进去看因果链；不把不同赛道硬排成一个冠军。</p>
+    </div>
+    <div class="update-meta"><a href="index.html">查看159822详情 →</a></div>
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">筛选逻辑</p>
+        <h2>三道门，不替你下结论</h2>
+        <p class="muted">产品质量 → 趋势状态 → 外部环境。只有每一层的数据完整，才进入“值得研究”。</p>
+      </div>
+      <div id="screenerMeta" class="alert-badge">读取候选池中…</div>
+    </section>
+
+    <section class="grid three-col">
+      <article class="panel"><p class="section-label">第一道：产品质量</p><h3>能不能买</h3><p class="action-text">规模、近20日成交额、折溢价、跟踪偏离、成分重合度。流动性或折溢价不合格，趋势再好也不进入候选。</p></article>
+      <article class="panel"><p class="section-label">第二道：趋势状态</p><h3>现在值不值得看</h3><p class="action-text">价格相对20日、60日线；均线方向；近5日、20日相对强弱。这里只标事实，不自动等于买卖。</p></article>
+      <article class="panel"><p class="section-label">第三道：外部环境</p><h3>上涨靠什么</h3><p class="action-text">关联市场、核心权重、利率、美元、汇率、行业事件。宏观数据缺失时，环境栏必须明确标“未验证”。</p></article>
+    </section>
+
+    <section class="panel">
+      <p class="section-label">当前候选池</p>
+      <p id="method" class="muted"></p>
+      <div id="candidateTable" class="candidate-table"></div>
+    </section>
+
+    <section class="grid two-col">
+      <article class="panel">
+        <p class="section-label">你怎么选ETF</p>
+        <ol class="signal-list">
+          <li>先选你愿意长期理解的方向，不从涨幅榜反推赛道。</li>
+          <li>同一方向只留流动性、规模、跟踪质量更好的1—2只比较。</li>
+          <li>趋势变好只说明“进入观察”；外部环境与位置决定是否等回踩或继续等。</li>
+          <li>不同方向之间比较的是风险敞口，不是把它们强行排第一名。</li>
+        </ol>
+      </article>
+      <article class="panel">
+        <p class="section-label">数据完整前不做的事</p>
+        <ul class="signal-list">
+          <li>不输出“最值得买ETF”。</li>
+          <li>不使用单日涨跌代替趋势。</li>
+          <li>不让宏观数据缺失被包装成利多或利空。</li>
+          <li>不把一个ETF代理当成另一个ETF的全部逻辑。</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <script src="screener.js"></script>
+</body>
+</html>
