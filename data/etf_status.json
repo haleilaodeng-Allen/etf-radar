@@ -8,7 +8,7 @@
     "relative_strength": "待接入",
     "alert_level": "数据不完整",
     "action_title": "不输出交易判断",
-    "action": "关键数据未能完整验证，因此系统不生成预警。原因：东方财富未返回足够的159822历史净值",
+    "action": "关键数据未能完整验证，因此系统不生成预警。原因：The read operation timed out",
     "logic_chain": [
       "美债收益率变化",
       "成长股估值压力",
@@ -17,7 +17,7 @@
       "新经济ETF环境"
     ],
     "negative_signals": [
-      "数据质量保护已触发：东方财富未返回足够的159822历史净值"
+      "数据质量保护已触发：The read operation timed out"
     ],
     "positive_signals": [
       "上一次有效数值不会被坏数据覆盖。"
