@@ -2,9 +2,6 @@ name: Update ETF Radar
 
 on:
   workflow_dispatch:
-  schedule:
-    # 工作日泰国时间约 22:20（UTC 15:20）；GitHub 定时任务可能延迟。
-    - cron: '20 15 * * 1-5'
 
 permissions:
   contents: write
@@ -26,3 +23,5 @@ jobs:
           git add data/etf_status.json
           git diff --cached --quiet || git commit -m "Update ETF Radar market status"
           git push
+
+# 定时更新会在手动验证获得连续有效数据后再开启。
