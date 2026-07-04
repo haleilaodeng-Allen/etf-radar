@@ -18,12 +18,12 @@ jobs:
         run: pip install --disable-pip-version-check akshare
       - name: Update market signals
         run: python scripts/update_market.py
-      - name: Commit updated status when changed
+      - name: Commit updated dashboard data when changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/etf_status.json
-          git diff --cached --quiet || git commit -m "Update ETF Radar market status"
+          git add data/etf_status.json data/candidate_status.json
+          git diff --cached --quiet || git commit -m "Update ETF Radar dashboard data"
           git push
 
 # 定时更新会在手动验证获得连续有效数据后再开启。
