@@ -1,11 +1,10 @@
 """更新 159822 的第一批市场信号。
 
-数据源：
-- 东方财富：159822 日线
-- Yahoo Finance：3033.HK 作为恒生科技ETF代理、美元指数历史日线
-- FRED：美国 10 年期国债收益率 DGS10
+仅使用两个稳定来源：
+- 东方财富：159822 与 3033.HK（恒生科技ETF代理）日线
+- FRED：美国10年期收益率 DGS10、广义美元指数 DTWEXBGS
 
-原则：四项关键数据任一缺失，就只写“数据不完整”，不产生交易预警。
+原则：关键数据任一缺失，就暂停判断，不生成交易预警。
 """
 from __future__ import annotations
 
@@ -13,14 +12,12 @@ import csv
 import io
 import json
 import statistics
-import time
-from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 STATUS_FILE = ROOT / "data" / "etf_status.json"
-HEADERS = {"User-Agent": "Mozilla/5.0 ETF-Radar/1.0"}
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def get_json(url: str) -> dict:
@@ -35,86 +32,61 @@ def get_text(url: str) -> str:
         return response.read().decode("utf-8")
 
 
-def eastmoney_etf_closes() -> list[tuple[str, float]]:
+def eastmoney_closes(secid: str, label: str) -> list[tuple[str, float]]:
     url = (
         "https://push2his.eastmoney.com/api/qt/stock/kline/get?"
-        "secid=0.159822&klt=101&fqt=1&lmt=140&"
+        f"secid={secid}&klt=101&fqt=1&lmt=140&"
         "fields1=f1,f2,f3,f4,f5,f6&"
         "fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
     )
     payload = get_json(url)
     rows = (payload.get("data") or {}).get("klines") or []
-    if not rows:
-        raise ValueError("东方财富未返回159822日线")
-    return [(row.split(",")[0], float(row.split(",")[2])) for row in rows if row.split(",")[2] != "-"]
+    values = [(r.split(",")[0], float(r.split(",")[2])) for r in rows if r.split(",")[2] != "-"]
+    if len(values) < 25:
+        raise ValueError(f"东方财富未返回足够的{label}日线")
+    return values
 
 
-def yahoo_closes(symbol: str) -> list[tuple[str, float]]:
-    now = int(time.time())
-    start = now - 180 * 86400
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1={start}&period2={now}&interval=1d"
-    payload = get_json(url)
-    chart = payload.get("chart") or {}
-    result_list = chart.get("result") or []
-    if not result_list:
-        detail = chart.get("error") or {}
-        raise ValueError(f"Yahoo未返回{symbol}有效数据：{detail.get('description', '未知原因')}")
-    result = result_list[0]
-    closes = result["indicators"]["quote"][0]["close"]
-    timestamps = result["timestamp"]
-    data = []
-    for stamp, close in zip(timestamps, closes):
-        if close is not None:
-            day = datetime.fromtimestamp(stamp, tz=timezone.utc).date().isoformat()
-            data.append((day, float(close)))
-    if not data:
-        raise ValueError(f"Yahoo返回{symbol}但无有效收盘价")
-    return data
-
-
-def fred_dgs10() -> list[tuple[str, float]]:
-    text = get_text("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10")
+def fred_series(series: str, label: str) -> list[tuple[str, float]]:
+    text = get_text(f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}")
     rows = csv.DictReader(io.StringIO(text))
-    data = []
+    values = []
     for row in rows:
-        value = row.get("DGS10", "")
+        value = row.get(series, "")
         if value and value != ".":
-            data.append((row["DATE"], float(value)))
-    if not data:
-        raise ValueError("FRED未返回美国10年期收益率")
-    return data[-140:]
+            values.append((row["DATE"], float(value)))
+    if len(values) < 25:
+        raise ValueError(f"FRED未返回足够的{label}数据")
+    return values[-140:]
 
 
 def pct_change(values: list[float], periods: int = 5) -> float:
     return (values[-1] / values[-1 - periods] - 1) * 100
 
 
-def fmt(value: float, digits: int = 3) -> str:
-    return f"{value:.{digits}f}"
+def fmt(value: float) -> str:
+    return f"{value:.3f}"
 
 
 def build_status() -> dict:
-    etf = eastmoney_etf_closes()
-    hstech_proxy = yahoo_closes("3033.HK")
-    dxy = yahoo_closes("DX-Y.NYB")
-    dgs10 = fred_dgs10()
-
-    if min(len(etf), len(hstech_proxy), len(dxy), len(dgs10)) < 25:
-        raise ValueError("至少一项关键数据不足25个有效观测值")
+    etf = eastmoney_closes("0.159822", "159822")
+    # 港交所：3033.HK，东方财富港股代码格式为 116.03033
+    hstech_proxy = eastmoney_closes("116.03033", "恒生科技ETF代理")
+    dgs10 = fred_series("DGS10", "美国10年期收益率")
+    dollar = fred_series("DTWEXBGS", "广义美元指数")
 
     etf_dates, etf_values = zip(*etf)
-    hstech_values = [x[1] for x in hstech_proxy]
-    dxy_values = [x[1] for x in dxy]
-    dgs_values = [x[1] for x in dgs10]
+    hstech_values = [v for _, v in hstech_proxy]
+    dgs_values = [v for _, v in dgs10]
+    dollar_values = [v for _, v in dollar]
     price = etf_values[-1]
     ma20 = statistics.mean(etf_values[-20:])
     ma60 = statistics.mean(etf_values[-60:])
     hstech_5d = pct_change(hstech_values)
-    dxy_5d = pct_change(dxy_values)
+    dollar_5d = pct_change(dollar_values)
     dgs10_5d_bp = (dgs_values[-1] - dgs_values[-6]) * 100
 
-    negatives, positives = [], []
-    risk_count = 0
+    negatives, positives, risk_count = [], [], 0
     if price < ma20:
         negatives.append("ETF收盘价低于20日线，短线趋势偏弱。")
         risk_count += 1
@@ -135,15 +107,15 @@ def build_status() -> dict:
         risk_count += 1
     elif dgs10_5d_bp < -5:
         positives.append(f"美国10年期收益率近5日下行 {abs(dgs10_5d_bp):.0f}bp，成长估值压力缓和。")
-    if dxy_5d > 0.5:
-        negatives.append(f"美元指数近5日上涨 {dxy_5d:.1f}% ，港股风险偏好承压。")
+    if dollar_5d > 0.3:
+        negatives.append(f"广义美元指数近5日上涨 {dollar_5d:.1f}% ，外部流动性压力增加。")
         risk_count += 1
-    elif dxy_5d < -0.5:
-        positives.append(f"美元指数近5日下跌 {abs(dxy_5d):.1f}% ，外部流动性压力缓和。")
+    elif dollar_5d < -0.3:
+        positives.append(f"广义美元指数近5日下跌 {abs(dollar_5d):.1f}% ，外部流动性压力缓和。")
 
     if risk_count >= 4:
         level, title = "橙色预警", "多项领先变量转坏，先控制风险"
-        action = "停止加仓；已有仓位以60日线和外部环境是否继续恶化为重点。"
+        action = "停止加仓；已有仓位重点看60日线与外部环境是否继续恶化。"
     elif risk_count >= 2:
         level, title = "黄色预警", "上涨条件开始松动，先保护判断空间"
         action = "不追跌、不加仓；观察是否重新站回20日线，以及恒生科技和利率压力是否改善。"
@@ -180,15 +152,10 @@ def write_unavailable(reason: str) -> None:
     STATUS_FILE.write_text(json.dumps([old], ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def main() -> None:
+if __name__ == "__main__":
     try:
-        status = build_status()
-        STATUS_FILE.write_text(json.dumps([status], ensure_ascii=False, indent=2), encoding="utf-8")
+        STATUS_FILE.write_text(json.dumps([build_status()], ensure_ascii=False, indent=2), encoding="utf-8")
         print("Market data updated successfully.")
     except Exception as error:
         write_unavailable(str(error))
         print(f"Update paused: {error}")
-
-
-if __name__ == "__main__":
-    main()
