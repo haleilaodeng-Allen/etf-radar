@@ -1,0 +1,21 @@
+name: Update ETF Radar
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run safe updater
+        run: python scripts/update_market.py
+
+# 定时更新将在数据源、密钥和数据质量规则完成后再开启。
+# 这样不会在尚未验证数据时自动生成误导性结论。
