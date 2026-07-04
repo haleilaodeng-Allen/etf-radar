@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ETF Radar · 个人情报雷达</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">PERSONAL MARKET INTELLIGENCE</p>
+      <h1>ETF Radar</h1>
+      <p class="subtitle">先看上涨靠什么，再看这些条件是否仍在。</p>
+    </div>
+    <div id="updateMeta" class="update-meta">读取数据中…</div>
+  </header>
+
+  <main id="app" class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">当前样板</p>
+        <h2 id="etfName">—</h2>
+        <p id="trackingIndex" class="muted">—</p>
+      </div>
+      <div id="alertBadge" class="alert-badge">—</div>
+    </section>
+
+    <section class="grid metrics" id="metrics"></section>
+
+    <section class="grid two-col">
+      <article class="panel">
+        <p class="section-label">今日判断</p>
+        <h3 id="actionTitle">—</h3>
+        <p id="actionText" class="action-text">—</p>
+        <p class="disclaimer">状态来自规则演示数据；接入真实数据前不作为交易建议。</p>
+      </article>
+      <article class="panel">
+        <p class="section-label">为什么会影响它</p>
+        <div id="logicChain" class="logic-chain"></div>
+      </article>
+    </section>
+
+    <section class="grid two-col">
+      <article class="panel">
+        <p class="section-label bad">当前拖累</p>
+        <ul id="negativeSignals" class="signal-list"></ul>
+      </article>
+      <article class="panel">
+        <p class="section-label good">仍在支持</p>
+        <ul id="positiveSignals" class="signal-list"></ul>
+      </article>
+    </section>
+
+    <section class="panel">
+      <p class="section-label">影响地图</p>
+      <div id="mapGroups" class="map-groups"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
