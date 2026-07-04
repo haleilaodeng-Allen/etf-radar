@@ -1,10 +1,7 @@
-"""更新 159822 的第一批市场信号。
+"""ETF Radar 数据更新。
 
-数据源：
-- 腾讯财经场内日线：159822、513180（恒生科技ETF代理）
-- FRED：美国10年期收益率 DGS10、广义美元指数 DTWEXBGS
-
-159822 是跨境ETF。均线必须基于场内价格序列，不再使用基金净值接口。
+价格数据通过 AKShare 统一适配；宏观数据通过 FRED CSV。
+价格更新与宏观更新分开：宏观暂时不可用时，仍保留ETF价格和均线，不再整页清空。
 """
 from __future__ import annotations
 
@@ -12,133 +9,121 @@ import csv
 import io
 import json
 import statistics
-import time
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+import akshare as ak
+
 ROOT = Path(__file__).resolve().parents[1]
 STATUS_FILE = ROOT / "data" / "etf_status.json"
-HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"}
-
-
-def fetch_bytes(url: str) -> bytes:
-    last_error: Exception | None = None
-    for attempt in range(3):
-        try:
-            request = Request(url, headers=HEADERS)
-            with urlopen(request, timeout=30) as response:
-                return response.read()
-        except Exception as error:
-            last_error = error
-            time.sleep(1 + attempt)
-    raise RuntimeError(str(last_error))
-
-
-def get_json(url: str) -> dict:
-    return json.loads(fetch_bytes(url).decode("utf-8"))
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def get_text(url: str) -> str:
-    return fetch_bytes(url).decode("utf-8")
+    request = Request(url, headers=HEADERS)
+    with urlopen(request, timeout=30) as response:
+        return response.read().decode("utf-8")
 
 
-def tencent_daily(symbol: str, label: str) -> list[tuple[str, float]]:
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,140,qfq"
-    payload = get_json(url)
-    data = payload.get("data") or {}
-    block = data.get(symbol) or {}
-    rows = block.get("day") or block.get("qfqday") or []
-    values = []
-    for row in rows:
-        # [date, open, close, high, low, volume, ...]
-        if len(row) >= 3 and row[2] not in (None, "", "-"):
-            values.append((str(row[0]), float(row[2])))
-    if len(values) < 65:
-        raise ValueError(f"腾讯财经未返回足够的{label}场内日线")
+def fred_series(series: str) -> list[float]:
+    rows = csv.DictReader(io.StringIO(get_text(f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}")))
+    values = [float(r[series]) for r in rows if r.get(series) not in (None, "", ".")]
+    if len(values) < 10:
+        raise ValueError(f"FRED {series} 数据不足")
     return values
 
 
-def fred_series(series: str, label: str) -> list[tuple[str, float]]:
-    text = get_text(f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}")
-    rows = csv.DictReader(io.StringIO(text))
-    values = []
-    for row in rows:
-        value = row.get(series, "")
-        if value and value != ".":
-            values.append((row["DATE"], float(value)))
-    if len(values) < 25:
-        raise ValueError(f"FRED未返回足够的{label}数据")
-    return values[-140:]
+def etf_closes(symbol: str) -> tuple[list[str], list[float]]:
+    df = ak.fund_etf_hist_em(symbol=symbol, period="daily", start_date="20250101", end_date="20301231", adjust="qfq")
+    if df is None or len(df) < 65:
+        raise ValueError(f"AKShare未返回足够的{symbol}日线")
+    date_col = "日期"
+    close_col = "收盘"
+    dates = [str(x)[:10] for x in df[date_col].tolist()]
+    closes = [float(x) for x in df[close_col].tolist()]
+    return dates, closes
 
 
 def pct_change(values: list[float], periods: int = 5) -> float:
     return (values[-1] / values[-1 - periods] - 1) * 100
 
 
-def fmt(value: float) -> str:
-    return f"{value:.3f}"
+def previous() -> dict:
+    return json.loads(STATUS_FILE.read_text(encoding="utf-8"))[0]
 
 
-def build_status() -> dict:
-    etf = tencent_daily("sz159822", "159822")
-    hstech_proxy = tencent_daily("sh513180", "恒生科技ETF代理")
-    dgs10 = fred_series("DGS10", "美国10年期收益率")
-    dollar = fred_series("DTWEXBGS", "广义美元指数")
+def main() -> None:
+    old = previous()
+    try:
+        dates, closes = etf_closes("159822")
+        _, hstech = etf_closes("513180")
+    except Exception as error:
+        old.update({
+            "as_of": "ETF价格更新失败：保留上一份状态",
+            "alert_level": "价格数据不可用",
+            "action_title": "不输出交易判断",
+            "action": f"ETF日线未能更新，暂停判断。原因：{error}",
+            "negative_signals": [f"价格数据保护触发：{error}"],
+            "positive_signals": ["已有有效数据不会被空值覆盖。"]
+        })
+        STATUS_FILE.write_text(json.dumps([old], ensure_ascii=False, indent=2), encoding="utf-8")
+        print(old["action"])
+        return
 
-    etf_dates, etf_values = zip(*etf)
-    hstech_values = [v for _, v in hstech_proxy]
-    dgs_values = [v for _, v in dgs10]
-    dollar_values = [v for _, v in dollar]
-    price = etf_values[-1]
-    ma20 = statistics.mean(etf_values[-20:])
-    ma60 = statistics.mean(etf_values[-60:])
-    hstech_5d = pct_change(hstech_values)
-    dollar_5d = pct_change(dollar_values)
-    dgs10_5d_bp = (dgs_values[-1] - dgs_values[-6]) * 100
-
-    negatives, positives, risk_count = [], [], 0
+    price, ma20, ma60 = closes[-1], statistics.mean(closes[-20:]), statistics.mean(closes[-60:])
+    negatives, positives, risk = [], [], 0
     if price < ma20:
         negatives.append("场内价格低于20日线，短线趋势偏弱。")
-        risk_count += 1
+        risk += 1
     else:
-        positives.append("场内价格仍在20日线上方，短线趋势尚未转弱。")
+        positives.append("场内价格仍在20日线上方。")
     if price < ma60:
         negatives.append("场内价格低于60日线，中期趋势需要重新观察。")
-        risk_count += 1
+        risk += 1
     else:
-        positives.append("场内价格仍在60日线上方，中期结构尚未确认走坏。")
+        positives.append("场内价格仍在60日线上方。")
+    hstech_5d = pct_change(hstech)
     if hstech_5d < 0:
         negatives.append(f"恒生科技ETF代理近5日 {hstech_5d:.1f}% ，外部科技环境偏弱。")
-        risk_count += 1
+        risk += 1
     else:
-        positives.append(f"恒生科技ETF代理近5日 {hstech_5d:.1f}% ，外部科技环境提供支持。")
-    if dgs10_5d_bp > 5:
-        negatives.append(f"美国10年期收益率近5日上行 {dgs10_5d_bp:.0f}bp，成长估值压力增加。")
-        risk_count += 1
-    elif dgs10_5d_bp < -5:
-        positives.append(f"美国10年期收益率近5日下行 {abs(dgs10_5d_bp):.0f}bp，成长估值压力缓和。")
-    if dollar_5d > 0.3:
-        negatives.append(f"广义美元指数近5日上涨 {dollar_5d:.1f}% ，外部流动性压力增加。")
-        risk_count += 1
-    elif dollar_5d < -0.3:
-        positives.append(f"广义美元指数近5日下跌 {abs(dollar_5d):.1f}% ，外部流动性压力缓和。")
+        positives.append(f"恒生科技ETF代理近5日 {hstech_5d:.1f}% ，提供外部支持。")
 
-    if risk_count >= 4:
-        level, title = "橙色预警", "多项领先变量转坏，先控制风险"
-        action = "停止加仓；已有仓位重点看60日线与外部环境是否继续恶化。"
-    elif risk_count >= 2:
-        level, title = "黄色预警", "上涨条件开始松动，先保护判断空间"
-        action = "不追跌、不加仓；观察能否重新站回20日线，以及恒生科技和利率压力是否改善。"
+    macro_notes = []
+    try:
+        dgs10 = fred_series("DGS10")
+        dollar = fred_series("DTWEXBGS")
+        yield_bp = (dgs10[-1] - dgs10[-6]) * 100
+        dollar_5d = pct_change(dollar)
+        if yield_bp > 5:
+            negatives.append(f"美国10年期收益率近5日上行 {yield_bp:.0f}bp，成长估值压力增加。")
+            risk += 1
+        elif yield_bp < -5:
+            positives.append(f"美国10年期收益率近5日下行 {abs(yield_bp):.0f}bp，成长估值压力缓和。")
+        if dollar_5d > 0.3:
+            negatives.append(f"广义美元指数近5日上涨 {dollar_5d:.1f}% ，外部流动性压力增加。")
+            risk += 1
+        elif dollar_5d < -0.3:
+            positives.append(f"广义美元指数近5日下跌 {abs(dollar_5d):.1f}% ，外部压力缓和。")
+    except Exception as error:
+        macro_notes.append(f"宏观数据暂未更新：{error}")
+
+    if risk >= 4:
+        level, title, action = "橙色预警", "多项领先变量转坏，先控制风险", "停止加仓；已有仓位重点看60日线和外部环境。"
+    elif risk >= 2:
+        level, title, action = "黄色预警", "上涨条件开始松动，先保护判断空间", "不追跌、不加仓；观察20日线与恒生科技能否改善。"
     else:
-        level, title = "环境正常", "当前外部环境未出现集中恶化"
-        action = "不代表可以买入；仍需结合位置、回踩和仓位管理判断。"
+        level, title, action = "环境正常", "当前未出现集中转弱", "不代表可以买入；仍需结合位置、回踩和仓位管理判断。"
+    if macro_notes:
+        action += " 宏观部分暂未更新，因此预警仅基于ETF趋势与恒生科技代理。"
+        positives.extend(macro_notes)
 
-    return {
+    status = {
         "code": "159822",
-        "as_of": f"数据更新：场内价格 {etf_dates[-1]} · 宏观数据截至最近可得交易日",
-        "price": fmt(price),
-        "ma20": fmt(ma20),
-        "ma60": fmt(ma60),
+        "as_of": f"数据更新：场内价格 {dates[-1]}",
+        "price": f"{price:.3f}",
+        "ma20": f"{ma20:.3f}",
+        "ma60": f"{ma60:.3f}",
         "relative_strength": f"恒科代理5日 {hstech_5d:+.1f}%",
         "alert_level": level,
         "action_title": title,
@@ -147,25 +132,9 @@ def build_status() -> dict:
         "negative_signals": negatives or ["暂未发现本规则定义的集中转弱信号。"],
         "positive_signals": positives or ["暂未发现本规则定义的明显支持信号。"]
     }
-
-
-def write_unavailable(reason: str) -> None:
-    old = json.loads(STATUS_FILE.read_text(encoding="utf-8"))[0]
-    old.update({
-        "as_of": "数据更新失败：已暂停判断",
-        "alert_level": "数据不完整",
-        "action_title": "不输出交易判断",
-        "action": "关键数据未能完整验证，因此系统不生成预警。原因：" + reason,
-        "negative_signals": ["数据质量保护已触发：" + reason],
-        "positive_signals": ["上一次有效数值不会被坏数据覆盖。"]
-    })
-    STATUS_FILE.write_text(json.dumps([old], ensure_ascii=False, indent=2), encoding="utf-8")
+    STATUS_FILE.write_text(json.dumps([status], ensure_ascii=False, indent=2), encoding="utf-8")
+    print("ETF price data updated successfully.")
 
 
 if __name__ == "__main__":
-    try:
-        STATUS_FILE.write_text(json.dumps([build_status()], ensure_ascii=False, indent=2), encoding="utf-8")
-        print("Market data updated successfully.")
-    except Exception as error:
-        write_unavailable(str(error))
-        print(f"Update paused: {error}")
+    main()
