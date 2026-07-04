@@ -3,66 +3,61 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ETF Radar · 个人情报雷达</title>
+  <title>ETF Radar · ETF筛选器</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">PERSONAL MARKET INTELLIGENCE</p>
-      <h1>ETF Radar</h1>
-      <p class="subtitle">先看事实和证据，再由你判断上涨条件是否仍在。</p>
+      <p class="eyebrow">ETF CANDIDATE UNIVERSE</p>
+      <h1>ETF 筛选器</h1>
+      <p class="subtitle">先筛值得研究的方向和标的，再进入单只ETF看证据链。</p>
     </div>
-    <div id="updateMeta" class="update-meta">读取数据中…</div>
+    <div id="screenerMeta" class="update-meta">读取候选池中…</div>
   </header>
 
-  <main id="app" class="page">
+  <main class="page">
     <section class="hero">
       <div>
-        <p class="eyebrow">当前样板</p>
-        <h2 id="etfName">—</h2>
-        <p id="trackingIndex" class="muted">—</p>
+        <p class="eyebrow">候选池</p>
+        <h2>先筛，再判断</h2>
+        <p class="muted">不同赛道不做单一排名；这里只展示数据完整度和趋势事实。</p>
       </div>
-      <div id="alertBadge" class="alert-badge">数据状态：—</div>
+      <div class="alert-badge">候选池</div>
     </section>
 
-    <section class="grid metrics" id="metrics"></section>
-
-    <section class="grid two-col">
-      <article class="panel">
-        <p class="section-label">事实摘要，不是结论</p>
-        <h3 id="actionTitle">—</h3>
-        <p id="actionText" class="action-text">—</p>
-        <p class="disclaimer">工具展示证据、来源与缺失项；不替代你作买卖判断。</p>
-      </article>
-      <article class="panel">
-        <p class="section-label">因果链：为什么要看这些</p>
-        <div id="logicChain" class="logic-chain"></div>
-      </article>
-    </section>
-
-    <section class="grid two-col">
-      <article class="panel">
-        <p class="section-label bad">当前偏弱事实</p>
-        <ul id="negativeSignals" class="signal-list"></ul>
-      </article>
-      <article class="panel">
-        <p class="section-label good">当前偏强事实</p>
-        <ul id="positiveSignals" class="signal-list"></ul>
-      </article>
+    <section class="grid three-col">
+      <article class="panel"><p class="section-label">产品质量</p><h3>能不能交易</h3><p class="action-text">规模、成交额、折溢价、跟踪误差。当前尚未接入，因此不评价产品质量。</p></article>
+      <article class="panel"><p class="section-label">趋势事实</p><h3>是否值得研究</h3><p class="action-text">场内价格、20日线、60日线。这里只展示位置，不给买卖建议。</p></article>
+      <article class="panel"><p class="section-label">外部环境</p><h3>它靠什么上涨</h3><p class="action-text">关联市场、权重股、利率、美元和行业变量。每只ETF需要单独建立影响地图。</p></article>
     </section>
 
     <section class="panel">
-      <p class="section-label">你的判断清单</p>
-      <ol id="decisionChecklist" class="signal-list"></ol>
+      <p class="section-label">ETF候选池</p>
+      <p id="method" class="muted"></p>
+      <div id="candidateTable" class="candidate-table"></div>
+      <p id="failureNote" class="disclaimer"></p>
     </section>
 
-    <section class="panel">
-      <p class="section-label">影响地图</p>
-      <div id="mapGroups" class="map-groups"></div>
+    <section class="grid two-col">
+      <article class="panel">
+        <p class="section-label">使用顺序</p>
+        <ol class="signal-list">
+          <li>先选你能理解的赛道，不从涨幅榜倒推逻辑。</li>
+          <li>在同一赛道里比较产品质量，通常只留1—2只。</li>
+          <li>趋势事实决定是否进入详情页研究，不决定是否立刻买。</li>
+          <li>点进详情页，再看关联市场与因果证据。</li>
+        </ol>
+      </article>
+      <article class="panel">
+        <p class="section-label">单只样板</p>
+        <h3>159822 新经济ETF</h3>
+        <p class="action-text">已建立影响地图：港股科技、核心平台公司、美债、美元、平台竞争和消费恢复。</p>
+        <p><a class="detail-link" href="detail.html">打开159822证据面板 →</a></p>
+      </article>
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="screener.js"></script>
 </body>
 </html>
