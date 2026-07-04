@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ETF Radar · 159822详情</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">ETF EVIDENCE PANEL</p>
+      <h1>ETF Radar</h1>
+      <p class="subtitle">单只ETF的事实、影响链与判断清单。</p>
+    </div>
+    <div class="update-meta"><a href="index.html">← 返回ETF筛选器</a></div>
+  </header>
+
+  <main id="app" class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">当前样板</p>
+        <h2 id="etfName">—</h2>
+        <p id="trackingIndex" class="muted">—</p>
+      </div>
+      <div id="alertBadge" class="alert-badge">数据状态：—</div>
+    </section>
+    <section class="grid metrics" id="metrics"></section>
+    <section class="grid two-col">
+      <article class="panel"><p class="section-label">事实摘要，不是结论</p><h3 id="actionTitle">—</h3><p id="actionText" class="action-text">—</p><p class="disclaimer">工具展示证据、来源与缺失项；不替代你作买卖判断。</p></article>
+      <article class="panel"><p class="section-label">因果链：为什么要看这些</p><div id="logicChain" class="logic-chain"></div></article>
+    </section>
+    <section class="grid two-col">
+      <article class="panel"><p class="section-label bad">当前偏弱事实</p><ul id="negativeSignals" class="signal-list"></ul></article>
+      <article class="panel"><p class="section-label good">当前偏强事实</p><ul id="positiveSignals" class="signal-list"></ul></article>
+    </section>
+    <section class="panel"><p class="section-label">你的判断清单</p><ol id="decisionChecklist" class="signal-list"></ol></section>
+    <section class="panel"><p class="section-label">影响地图</p><div id="mapGroups" class="map-groups"></div></section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
