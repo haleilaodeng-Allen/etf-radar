@@ -1,10 +1,10 @@
 """更新 159822 的第一批市场信号。
 
-仅使用两个稳定来源：
-- 东方财富：159822 与 3033.HK（恒生科技ETF代理）日线
+数据源：
+- 东方财富基金历史净值：159822 新经济ETF、513180 恒生科技ETF代理
 - FRED：美国10年期收益率 DGS10、广义美元指数 DTWEXBGS
 
-原则：关键数据任一缺失，就暂停判断，不生成交易预警。
+159822 是跨境ETF。第一版用基金历史净值计算趋势，避免把普通股票K线接口错误套用到跨境ETF。
 """
 from __future__ import annotations
 
@@ -12,38 +12,58 @@ import csv
 import io
 import json
 import statistics
+import time
 from pathlib import Path
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 STATUS_FILE = ROOT / "data" / "etf_status.json"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://fundf10.eastmoney.com/",
+    "Accept": "application/json, text/plain, */*",
+}
+
+
+def fetch_bytes(url: str) -> bytes:
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            request = Request(url, headers=HEADERS)
+            with urlopen(request, timeout=30) as response:
+                return response.read()
+        except Exception as error:
+            last_error = error
+            time.sleep(1 + attempt)
+    raise RuntimeError(str(last_error))
 
 
 def get_json(url: str) -> dict:
-    request = Request(url, headers=HEADERS)
-    with urlopen(request, timeout=25) as response:
-        return json.loads(response.read().decode("utf-8"))
+    return json.loads(fetch_bytes(url).decode("utf-8"))
 
 
 def get_text(url: str) -> str:
-    request = Request(url, headers=HEADERS)
-    with urlopen(request, timeout=25) as response:
-        return response.read().decode("utf-8")
+    return fetch_bytes(url).decode("utf-8")
 
 
-def eastmoney_closes(secid: str, label: str) -> list[tuple[str, float]]:
+def fund_nav_closes(fund_code: str, label: str) -> list[tuple[str, float]]:
+    """东方财富基金历史净值接口。DWJZ 是单位净值，适合做日线趋势。"""
     url = (
-        "https://push2his.eastmoney.com/api/qt/stock/kline/get?"
-        f"secid={secid}&klt=101&fqt=1&lmt=140&"
-        "fields1=f1,f2,f3,f4,f5,f6&"
-        "fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+        "https://api.fund.eastmoney.com/f10/lsjz?"
+        f"fundCode={fund_code}&pageIndex=1&pageSize=120&startDate=&endDate="
     )
     payload = get_json(url)
-    rows = (payload.get("data") or {}).get("klines") or []
-    values = [(r.split(",")[0], float(r.split(",")[2])) for r in rows if r.split(",")[2] != "-"]
-    if len(values) < 25:
-        raise ValueError(f"东方财富未返回足够的{label}日线")
+    data = payload.get("Data") or payload.get("data") or {}
+    rows = data.get("LSJZList") or data.get("lsjzList") or []
+    values = []
+    for row in rows:
+        date = row.get("FSRQ") or row.get("fsrq")
+        nav = row.get("DWJZ") or row.get("dwjz")
+        if date and nav not in (None, "", "-"):
+            values.append((str(date), float(nav)))
+    values.sort(key=lambda item: item[0])
+    if len(values) < 65:
+        raise ValueError(f"东方财富未返回足够的{label}历史净值")
     return values
 
 
@@ -69,9 +89,8 @@ def fmt(value: float) -> str:
 
 
 def build_status() -> dict:
-    etf = eastmoney_closes("0.159822", "159822")
-    # 港交所：3033.HK，东方财富港股代码格式为 116.03033
-    hstech_proxy = eastmoney_closes("116.03033", "恒生科技ETF代理")
+    etf = fund_nav_closes("159822", "159822")
+    hstech_proxy = fund_nav_closes("513180", "恒生科技ETF代理")
     dgs10 = fred_series("DGS10", "美国10年期收益率")
     dollar = fred_series("DTWEXBGS", "广义美元指数")
 
@@ -79,7 +98,7 @@ def build_status() -> dict:
     hstech_values = [v for _, v in hstech_proxy]
     dgs_values = [v for _, v in dgs10]
     dollar_values = [v for _, v in dollar]
-    price = etf_values[-1]
+    nav = etf_values[-1]
     ma20 = statistics.mean(etf_values[-20:])
     ma60 = statistics.mean(etf_values[-60:])
     hstech_5d = pct_change(hstech_values)
@@ -87,16 +106,16 @@ def build_status() -> dict:
     dgs10_5d_bp = (dgs_values[-1] - dgs_values[-6]) * 100
 
     negatives, positives, risk_count = [], [], 0
-    if price < ma20:
-        negatives.append("ETF收盘价低于20日线，短线趋势偏弱。")
+    if nav < ma20:
+        negatives.append("单位净值低于20日均线，短线趋势偏弱。")
         risk_count += 1
     else:
-        positives.append("ETF仍在20日线上方，短线趋势尚未转弱。")
-    if price < ma60:
-        negatives.append("ETF收盘价低于60日线，中期趋势需要重新观察。")
+        positives.append("单位净值仍在20日均线上方，短线趋势尚未转弱。")
+    if nav < ma60:
+        negatives.append("单位净值低于60日均线，中期趋势需要重新观察。")
         risk_count += 1
     else:
-        positives.append("ETF仍在60日线上方，中期结构尚未确认走坏。")
+        positives.append("单位净值仍在60日均线上方，中期结构尚未确认走坏。")
     if hstech_5d < 0:
         negatives.append(f"恒生科技ETF代理近5日 {hstech_5d:.1f}% ，外部科技环境偏弱。")
         risk_count += 1
@@ -118,22 +137,22 @@ def build_status() -> dict:
         action = "停止加仓；已有仓位重点看60日线与外部环境是否继续恶化。"
     elif risk_count >= 2:
         level, title = "黄色预警", "上涨条件开始松动，先保护判断空间"
-        action = "不追跌、不加仓；观察是否重新站回20日线，以及恒生科技和利率压力是否改善。"
+        action = "不追跌、不加仓；观察能否重新站回20日线，以及恒生科技和利率压力是否改善。"
     else:
         level, title = "环境正常", "当前外部环境未出现集中恶化"
         action = "不代表可以买入；仍需结合位置、回踩和仓位管理判断。"
 
     return {
         "code": "159822",
-        "as_of": f"数据更新：ETF {etf_dates[-1]} · 宏观数据截至最近可得交易日",
-        "price": fmt(price),
+        "as_of": f"数据更新：净值 {etf_dates[-1]} · 宏观数据截至最近可得交易日",
+        "price": fmt(nav),
         "ma20": fmt(ma20),
         "ma60": fmt(ma60),
         "relative_strength": f"恒科代理5日 {hstech_5d:+.1f}%",
         "alert_level": level,
         "action_title": title,
         "action": action,
-        "logic_chain": ["美债/美元变化", "成长股估值压力", "恒生科技强弱", "ETF趋势", "新经济ETF环境"],
+        "logic_chain": ["美债/美元变化", "成长股估值压力", "恒生科技强弱", "ETF净值趋势", "新经济ETF环境"],
         "negative_signals": negatives or ["暂未发现本规则定义的集中转弱信号。"],
         "positive_signals": positives or ["暂未发现本规则定义的明显支持信号。"]
     }
