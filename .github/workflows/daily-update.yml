@@ -2,20 +2,27 @@ name: Update ETF Radar
 
 on:
   workflow_dispatch:
+  schedule:
+    # 工作日泰国时间约 22:20（UTC 15:20）；GitHub 定时任务可能延迟。
+    - cron: '20 15 * * 1-5'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  validate:
+  update:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run safe updater
+      - name: Update market signals
         run: python scripts/update_market.py
-
-# 定时更新将在数据源、密钥和数据质量规则完成后再开启。
-# 这样不会在尚未验证数据时自动生成误导性结论。
+      - name: Commit updated status when changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/etf_status.json
+          git diff --cached --quiet || git commit -m "Update ETF Radar market status"
+          git push
