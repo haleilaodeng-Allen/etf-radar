@@ -1,10 +1,10 @@
 """更新 159822 的第一批市场信号。
 
 数据源：
-- 东方财富基金历史净值：159822 新经济ETF、513180 恒生科技ETF代理
+- 腾讯财经场内日线：159822、513180（恒生科技ETF代理）
 - FRED：美国10年期收益率 DGS10、广义美元指数 DTWEXBGS
 
-159822 是跨境ETF。第一版用基金历史净值计算趋势，避免把普通股票K线接口错误套用到跨境ETF。
+159822 是跨境ETF。均线必须基于场内价格序列，不再使用基金净值接口。
 """
 from __future__ import annotations
 
@@ -18,11 +18,7 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 STATUS_FILE = ROOT / "data" / "etf_status.json"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Referer": "https://fundf10.eastmoney.com/",
-    "Accept": "application/json, text/plain, */*",
-}
+HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"}
 
 
 def fetch_bytes(url: str) -> bytes:
@@ -46,24 +42,19 @@ def get_text(url: str) -> str:
     return fetch_bytes(url).decode("utf-8")
 
 
-def fund_nav_closes(fund_code: str, label: str) -> list[tuple[str, float]]:
-    """东方财富基金历史净值接口。DWJZ 是单位净值，适合做日线趋势。"""
-    url = (
-        "https://api.fund.eastmoney.com/f10/lsjz?"
-        f"fundCode={fund_code}&pageIndex=1&pageSize=120&startDate=&endDate="
-    )
+def tencent_daily(symbol: str, label: str) -> list[tuple[str, float]]:
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,140,qfq"
     payload = get_json(url)
-    data = payload.get("Data") or payload.get("data") or {}
-    rows = data.get("LSJZList") or data.get("lsjzList") or []
+    data = payload.get("data") or {}
+    block = data.get(symbol) or {}
+    rows = block.get("day") or block.get("qfqday") or []
     values = []
     for row in rows:
-        date = row.get("FSRQ") or row.get("fsrq")
-        nav = row.get("DWJZ") or row.get("dwjz")
-        if date and nav not in (None, "", "-"):
-            values.append((str(date), float(nav)))
-    values.sort(key=lambda item: item[0])
+        # [date, open, close, high, low, volume, ...]
+        if len(row) >= 3 and row[2] not in (None, "", "-"):
+            values.append((str(row[0]), float(row[2])))
     if len(values) < 65:
-        raise ValueError(f"东方财富未返回足够的{label}历史净值")
+        raise ValueError(f"腾讯财经未返回足够的{label}场内日线")
     return values
 
 
@@ -89,8 +80,8 @@ def fmt(value: float) -> str:
 
 
 def build_status() -> dict:
-    etf = fund_nav_closes("159822", "159822")
-    hstech_proxy = fund_nav_closes("513180", "恒生科技ETF代理")
+    etf = tencent_daily("sz159822", "159822")
+    hstech_proxy = tencent_daily("sh513180", "恒生科技ETF代理")
     dgs10 = fred_series("DGS10", "美国10年期收益率")
     dollar = fred_series("DTWEXBGS", "广义美元指数")
 
@@ -98,7 +89,7 @@ def build_status() -> dict:
     hstech_values = [v for _, v in hstech_proxy]
     dgs_values = [v for _, v in dgs10]
     dollar_values = [v for _, v in dollar]
-    nav = etf_values[-1]
+    price = etf_values[-1]
     ma20 = statistics.mean(etf_values[-20:])
     ma60 = statistics.mean(etf_values[-60:])
     hstech_5d = pct_change(hstech_values)
@@ -106,16 +97,16 @@ def build_status() -> dict:
     dgs10_5d_bp = (dgs_values[-1] - dgs_values[-6]) * 100
 
     negatives, positives, risk_count = [], [], 0
-    if nav < ma20:
-        negatives.append("单位净值低于20日均线，短线趋势偏弱。")
+    if price < ma20:
+        negatives.append("场内价格低于20日线，短线趋势偏弱。")
         risk_count += 1
     else:
-        positives.append("单位净值仍在20日均线上方，短线趋势尚未转弱。")
-    if nav < ma60:
-        negatives.append("单位净值低于60日均线，中期趋势需要重新观察。")
+        positives.append("场内价格仍在20日线上方，短线趋势尚未转弱。")
+    if price < ma60:
+        negatives.append("场内价格低于60日线，中期趋势需要重新观察。")
         risk_count += 1
     else:
-        positives.append("单位净值仍在60日均线上方，中期结构尚未确认走坏。")
+        positives.append("场内价格仍在60日线上方，中期结构尚未确认走坏。")
     if hstech_5d < 0:
         negatives.append(f"恒生科技ETF代理近5日 {hstech_5d:.1f}% ，外部科技环境偏弱。")
         risk_count += 1
@@ -144,15 +135,15 @@ def build_status() -> dict:
 
     return {
         "code": "159822",
-        "as_of": f"数据更新：净值 {etf_dates[-1]} · 宏观数据截至最近可得交易日",
-        "price": fmt(nav),
+        "as_of": f"数据更新：场内价格 {etf_dates[-1]} · 宏观数据截至最近可得交易日",
+        "price": fmt(price),
         "ma20": fmt(ma20),
         "ma60": fmt(ma60),
         "relative_strength": f"恒科代理5日 {hstech_5d:+.1f}%",
         "alert_level": level,
         "action_title": title,
         "action": action,
-        "logic_chain": ["美债/美元变化", "成长股估值压力", "恒生科技强弱", "ETF净值趋势", "新经济ETF环境"],
+        "logic_chain": ["美债/美元变化", "成长股估值压力", "恒生科技强弱", "ETF场内趋势", "新经济ETF环境"],
         "negative_signals": negatives or ["暂未发现本规则定义的集中转弱信号。"],
         "positive_signals": positives or ["暂未发现本规则定义的明显支持信号。"]
     }
